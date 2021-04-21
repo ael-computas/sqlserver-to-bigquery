@@ -1,0 +1,9 @@
+google-cloud-storage
+google-cloud-bigquery
+smart_open[gcs]
+pyodbc
+sqlalchemy
+backoff
+google-cloud-secret-manager
+PyYAML
+backoff

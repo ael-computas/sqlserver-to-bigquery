@@ -1,0 +1,10 @@
+venv*
+Dockerfile
+.gitlab-ci.yml
+arcgis_files
+ea_files
+gcs_files/*.csv
+setup.sh
+secret
+secret/key.json
+config.yaml
