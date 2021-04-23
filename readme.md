@@ -29,6 +29,7 @@ The program will attempt to read from SQL Server and do the following:
 - DB_DATABASE - database
 - GCS_BUCKET - tmp storage for data.  contains crc and schema as well
 - BQ_DATASET - bq dataset to load data into
+- TARGET_GCP_PROJECT - the target GCP project where the dataset exists.
 - DB_TABLE - Source table to read.  Also destination table name
 - SPLIT_SIZE - defaults to -1 (dynamic, attempts to split in 20 chunks if > 1m rows)
 - SQL_SERVER_SCHEMA - defaults to dbo if not set

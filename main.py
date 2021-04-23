@@ -14,13 +14,14 @@ logger.setLevel(logging.INFO)
 
 @dataclass
 class Config:
-    username: str
-    password: str
-    host: str
-    database: str
-    bucket: str
-    dataset: str
-    table: str
+    db_username: str
+    db_password: str
+    db_host: str
+    db_database: str
+    gcp_bucket: str
+    gcp_bq_dataset: str
+    gcp_target_project: str
+    db_table: str
     split_size: int = -1
     sql_server_schema: str = "dbo"
 
@@ -39,18 +40,21 @@ def get_env_config(override_dict) -> Config:
     assert bucket, "Missing GCS_BUCKET env variable"
     dataset = os.getenv("BQ_DATASET", None) or override_dict.get("bq_dataset", None)
     assert dataset, "Missing DATASET env variable"
+    target_gcp_project = os.getenv("TARGET_GCP_PROJECT", None) or override_dict.get("target_gcp_project", None)
+    assert target_gcp_project, "Missing TARGET_GCP_PROJECT env variable"
     table = os.getenv("DB_TABLE", None) or override_dict.get("db_table", None)
     assert table, "Missing DB_TABLE env variable"
     split_size = int(os.getenv("SPLIT_SIZE", None) or override_dict.get("split_size", -1))
     sql_server_schema = os.getenv("SQL_SERVER_SCHEMA", None) or override_dict.get("sql_server_schema", "dbo")
     return Config(
-        username=username,
-        password=password,
-        host=host,
-        database=database,
-        bucket=bucket,
-        dataset=dataset,
-        table=table,
+        db_username=username,
+        db_password=password,
+        db_host=host,
+        db_database=database,
+        gcp_bucket=bucket,
+        gcp_bq_dataset=dataset,
+        gcp_target_project=target_gcp_project,
+        db_table=table,
         split_size=split_size,
         sql_server_schema=sql_server_schema)
 
@@ -78,19 +82,20 @@ def get_config() -> Config:
 if __name__ == '__main__':
     config = get_config()
 
-    logger.info(f"Connecting to {config.username}/{config.database}@{config.host} and syncing table: {config.table} to {config.bucket}")
+    logger.info(f"Connecting to {config.db_username}/{config.db_database}@{config.db_host} and syncing table: "
+                f"{config.db_table} to {config.gcp_bucket}")
 
-    sql_server_to_csv = SqlServerToCsv(username=config.username,
-                                       password=config.password,
-                                       host=config.host,
-                                       database=config.database,
-                                       destination=f"gs://{config.bucket}/sqlserver/{config.dataset}")
+    sql_server_to_csv = SqlServerToCsv(username=config.db_username,
+                                       password=config.db_password,
+                                       host=config.db_host,
+                                       database=config.db_database,
+                                       destination=f"gs://{config.gcp_bucket}/sqlserver/{config.gcp_bq_dataset}")
 
     bigquery = SqlServerToBigquery(sql_server_to_csv=sql_server_to_csv)
 
-    result = bigquery.ingest_table(sql_server_table=config.table,
+    result = bigquery.ingest_table(sql_server_table=config.db_table,
                                    sql_server_schema="dbo",
-                                   bigquery_destination_project=os.getenv("GOOGLE_CLOUD_PROJECT"),
-                                   bigquery_destination_dataset=config.dataset,
+                                   bigquery_destination_project=config.gcp_target_project,
+                                   bigquery_destination_dataset=config.gcp_bq_dataset,
                                    split_size=config.split_size)
     logger.info(result.full_str())
