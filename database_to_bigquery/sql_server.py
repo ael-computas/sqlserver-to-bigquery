@@ -118,6 +118,12 @@ class SqlServerToCsv(DatabaseToCsv):
 
         return bq_row
 
+    def _get_columns_with_access(self, connection: engine.Connection, tbl_schema: str, tbl_name: str) -> List[str]:
+        res = next(connection.execute(f"SELECT TOP 1 * FROM {tbl_schema}.{tbl_name}"))
+
+        columns = [i for i in res.keys()]
+        return columns
+
     def get_columns(self, tbl_schema: str, tbl_name: str) -> Tuple[List[Column], List[str]]:
         """
         Gets a list of columns belonging to the table tbl_name
@@ -126,14 +132,20 @@ class SqlServerToCsv(DatabaseToCsv):
         :return: A tuple containing a list of columns + list of primary keys
         """
         with self.connect() as connection:
+            accessable_columns = self._get_columns_with_access(connection, tbl_schema, tbl_name)
             schema_res = connection.execute("SELECT C.column_name, C.data_type from INFORMATION_SCHEMA.COLUMNS as C WHERE TABLE_SCHEMA=? AND TABLE_NAME=?", (tbl_schema, tbl_name))
             columns = []
             debug_data = []
             for schema_row in schema_res:
-                column = Column(name=schema_row['column_name'].upper(),
+                column = Column(name=schema_row['column_name'],
                                 data_type=schema_row['data_type'].upper())
+                accessable = column.name in accessable_columns
                 if schema_row['data_type'].upper() not in self.ignore_mssql_types:
-                    columns.append(column)
+                    if accessable:
+                        columns.append(column)
+                if not accessable:
+                    logger.warning(f"{column} is not accessbile when doing select top 1 * from {tbl_schema}.{tbl_name},"
+                                   f" removing from column list.")
                 debug_data.append(column)
             if len(columns) == 0:
                 print(f"Oh no. No columns on table {tbl_name} after filtering.  Dumping debug stack!")
@@ -147,7 +159,7 @@ class SqlServerToCsv(DatabaseToCsv):
             pk_res = connection.execute(sql, tbl_name)
             pk_list = []
             for pk_row in pk_res:
-                pk_column = pk_row['COLUMN_NAME'].upper()
+                pk_column = pk_row['COLUMN_NAME']
                 pk_list.append(pk_column)
                 columns[columns.index(pk_column)].pk = True
 
