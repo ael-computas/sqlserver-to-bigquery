@@ -118,11 +118,14 @@ class SqlServerToCsv(DatabaseToCsv):
 
         return bq_row
 
-    def _get_columns_with_access(self, connection: engine.Connection, tbl_schema: str, tbl_name: str) -> List[str]:
-        res = next(connection.execute(f"SELECT TOP 1 * FROM {tbl_schema}.{tbl_name}"))
+    def _get_columns_with_access(self, connection: engine.Connection, tbl_schema: str, tbl_name: str) -> Optional[List[str]]:
+        try:
+            res = next(connection.execute(f"SELECT TOP 1 * FROM {tbl_schema}.{tbl_name}"))
 
-        columns = [i for i in res.keys()]
-        return columns
+            columns = [i for i in res.keys()]
+            return columns
+        except StopIteration as empty_table:
+            return None
 
     def get_columns(self, tbl_schema: str, tbl_name: str) -> Tuple[List[Column], List[str]]:
         """
@@ -139,7 +142,7 @@ class SqlServerToCsv(DatabaseToCsv):
             for schema_row in schema_res:
                 column = Column(name=schema_row['column_name'],
                                 data_type=schema_row['data_type'].upper())
-                accessable = column.name in accessable_columns
+                accessable = accessable_columns is None or column.name in accessable_columns
                 if schema_row['data_type'].upper() not in self.ignore_mssql_types:
                     if accessable:
                         columns.append(column)
@@ -174,6 +177,10 @@ class SqlServerToCsv(DatabaseToCsv):
 
     # TODO: maybe tmp table to lock records.
     def generate_splits(self, table: str, schema: str, columns: list, split_keys: list, split_size: int) -> dict:
+        """
+        Split table into chunks.
+        Generate a split for empty sources as well.
+        """
         splits = {}
         sql_view = self._generate_view_sql(table=table, schema=schema, columns=columns, split_keys=split_keys,
                                            split_size=split_size)
@@ -196,9 +203,18 @@ class SqlServerToCsv(DatabaseToCsv):
         logger.info(f"GENERATED SPLIT SQL: {sql_from_view}")
         with self.connect() as connection:
             split_res = connection.execute(sql_from_view)
+            cnt = 0
             for split in split_res:
+                cnt += 1
                 splits[split['internal_split']] = dict(split)
                 logger.info(f"Split with id {split['internal_split']} has crc = {split}")
+            if cnt == 0:
+                logger.warning(f"Source table {schema}.{table} is EMPTY. generating an empty split")
+                splits[1] = {
+                    'split_size': split_size,
+                    'internal_split': 1,
+                    'cnt': 0
+                }
         return splits
 
     @backoff.on_exception(backoff.expo,
