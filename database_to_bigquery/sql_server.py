@@ -441,14 +441,14 @@ class SqlServerToBigquery(DatabaseToBigquery):
         conversion = {
             "DATETIME": "TIMESTAMP",
             "NUMBER": "NUMERIC",
-            "DECIMAL": "FLOAT",
+            "DECIMAL": "FLOAT64",
             "FLOAT": "FLOAT",
-            "BIGINT": "NUMERIC"
+            "INT": "INT64"
         }
-        if sql_server_type.data_type in conversion:
-            return conversion[sql_server_type.data_type]
-        else:
-            return "STRING"
+        for sql_server_type_from, bigquery_type_to in conversion.items():
+            if sql_server_type_from in sql_server_type.data_type:
+                return bigquery_type_to
+        return "STRING"
 
     def calculate_bigquery_schema(self, columns_type: List[Column]) -> list:
         """
