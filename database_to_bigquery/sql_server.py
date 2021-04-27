@@ -10,7 +10,7 @@ import csv
 import decimal
 import platform
 import os
-import urllib.parse
+import pyodbc
 import backoff
 from time import time
 from google.cloud import bigquery
@@ -23,9 +23,9 @@ logger = logging.getLogger("DatabaseToBigquery")
 logger.setLevel(logging.INFO)
 logging.getLogger('backoff').addHandler(logging.StreamHandler())
 
-driver = 'ODBC+Driver+17+for+SQL+Server'
+driver = '{ODBC Driver 17 for SQL Server'
 if platform.system() == 'Windows':
-    driver = 'SQL+Server'
+    driver = '{SQL Server}'
 
 
 def retry_https_status_codes():
@@ -64,10 +64,18 @@ class SqlServerToCsv(DatabaseToCsv):
         self.host: str = host
         self.database: str = database
         self.destination: str = destination
-        port = os.getenv("DB_PORT", "1433")
+        self.port = os.getenv("DB_PORT", "1433")
+        self.connection_driver = os.getenv("DB_DRIVER", driver)
 
-        engine_str = f"mssql+pyodbc://{urllib.parse.quote_plus(self.username)}:{urllib.parse.quote_plus(self.password)}@{urllib.parse.quote_plus(self.host)}:{port}/{urllib.parse.quote_plus(self.database)}?driver={driver}"
-        self.sql_engine = create_engine(engine_str, fast_executemany=True)
+        # This method seems to handle cases where instance name is supplied better than sqlalchemy create engine with
+        # an url string.
+        self.sql_engine = create_engine('mssql://', creator=lambda x: pyodbc.connect(driver=self.connection_driver,
+                                                                                     server=self.host,
+                                                                                     database=self.database,
+                                                                                     uid=self.username,
+                                                                                     pwd=self.password,
+                                                                                     port=self.port)
+                                        )
         self.strip_char_type = True
         # bigquery doesnt really have blobs/lobs/..
         self.ignore_mssql_types = ["VARBINARY"]
