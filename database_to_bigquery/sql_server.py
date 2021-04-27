@@ -23,7 +23,7 @@ logger = logging.getLogger("DatabaseToBigquery")
 logger.setLevel(logging.INFO)
 logging.getLogger('backoff').addHandler(logging.StreamHandler())
 
-driver = '{ODBC Driver 17 for SQL Server'
+driver = '{ODBC Driver 17 for SQL Server}'
 if platform.system() == 'Windows':
     driver = '{SQL Server}'
 
