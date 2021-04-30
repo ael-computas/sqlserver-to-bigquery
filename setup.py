@@ -5,7 +5,7 @@ with open("package_readme.md", "r") as fh:
 
 setuptools.setup(
     name='database-to-bigquery',
-    version='0.0.1',
+    version='0.1.0',
     description='Read from SQL server and load to Google BigQuery',
     long_description=long_description,
     long_description_content_type="text/markdown",
