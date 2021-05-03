@@ -145,8 +145,9 @@ class SqlServerToCsv(DatabaseToCsv):
         with self.connect() as connection:
             accessable_columns = self._get_columns_with_access(connection, tbl_schema, tbl_name)
             schema_res = connection.execute("SELECT C.column_name, C.data_type from INFORMATION_SCHEMA.COLUMNS as C WHERE TABLE_SCHEMA=? AND TABLE_NAME=?", (tbl_schema, tbl_name))
-            columns = []
-            debug_data = []
+            columns: List[Column] = []
+            debug_data: List[Column] = []
+
             for schema_row in schema_res:
                 column = Column(name=schema_row['column_name'],
                                 data_type=schema_row['data_type'].upper())
@@ -173,6 +174,20 @@ class SqlServerToCsv(DatabaseToCsv):
                 pk_column = pk_row['COLUMN_NAME']
                 pk_list.append(pk_column)
                 columns[columns.index(pk_column)].pk = True
+
+            if len(pk_list) == 0:
+                if os.getenv("TABLE_PKS", None) is not None:
+                    pk_from_env = os.getenv("TABLE_PKS").split(",")
+                    logger.warning(f"The table or view {tbl_schema}.{tbl_name} has no primary keys, using explicit pks "
+                                   f"from environment...")
+                else:
+                    logger.warning(f"The table or view {tbl_schema}.{tbl_name} has no primary keys, will try to use all"
+                                   f" columns as sorting keys...")
+                    pk_from_env = [c.name for c in columns]
+                for pk_row in pk_from_env:
+                    pk_column: str = pk_row
+                    pk_list.append(pk_column)
+                    columns[columns.index(pk_column)].pk = True
 
             return columns, pk_list
 
