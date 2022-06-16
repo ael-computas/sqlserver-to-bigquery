@@ -1,4 +1,4 @@
-FROM python:3.7
+FROM python:3.7-buster
 # add microsoft keys to apt
 RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
 
