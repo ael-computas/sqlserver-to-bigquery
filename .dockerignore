@@ -8,3 +8,4 @@ setup.sh
 secret
 secret/key.json
 config.yaml
+.testconfig

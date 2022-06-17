@@ -39,7 +39,7 @@ def get_env_config(override_dict) -> Config:
     bucket = os.getenv("GCS_BUCKET", None) or override_dict.get("gcs_bucket", None)
     assert bucket, "Missing GCS_BUCKET env variable"
     dataset = os.getenv("BQ_DATASET", None) or override_dict.get("bq_dataset", None)
-    assert dataset, "Missing DATASET env variable"
+    assert dataset, "Missing BQ_DATASET env variable"
     target_gcp_project = os.getenv("TARGET_GCP_PROJECT", None) or override_dict.get("target_gcp_project", None)
     assert target_gcp_project, "Missing TARGET_GCP_PROJECT env variable"
     table = os.getenv("DB_TABLE", None) or override_dict.get("db_table", None)

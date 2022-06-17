@@ -2,9 +2,8 @@
 setup.sh
 .idea/
 /gcs_files/*
-/arcgis_files/
-/ea_files/
 *.pyc
 secret
 /db_conf.ini
 config.yaml
+testconfig
