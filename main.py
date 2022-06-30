@@ -33,6 +33,7 @@ def get_env_config(override_dict) -> Config:
     assert password, "Missing DB_PASSWORD env variable or in config"
     host = os.getenv("DB_HOST", None) or override_dict.get("db_host", None)
     assert host, "Missing DB_HOST env variable or in config"
+    assert ":" not in host, "Port should not be specified in host, use DB_PORT env variable to override port (1433)"
     database = os.getenv("DB_DATABASE", None) or override_dict.get("db_database", None)
     assert database, "Missing DB_DATABASE env variable or in config"
 
@@ -94,7 +95,7 @@ if __name__ == '__main__':
     bigquery = SqlServerToBigquery(sql_server_to_csv=sql_server_to_csv)
 
     result = bigquery.ingest_table(sql_server_table=config.db_table,
-                                   sql_server_schema="dbo",
+                                   sql_server_schema=config.sql_server_schema,
                                    bigquery_destination_project=config.gcp_target_project,
                                    bigquery_destination_dataset=config.gcp_bq_dataset,
                                    split_size=config.split_size)
