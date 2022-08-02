@@ -143,7 +143,6 @@ class SqlServerToCsv(DatabaseToCsv):
         :return: A tuple containing a list of columns + list of primary keys
         """
         with self.connect() as connection:
-            accessable_columns = self._get_columns_with_access(connection, tbl_schema, tbl_name)
             schema_res = connection.execute("SELECT C.column_name, C.data_type from INFORMATION_SCHEMA.COLUMNS as C WHERE TABLE_SCHEMA=? AND TABLE_NAME=?", (tbl_schema, tbl_name))
             columns: List[Column] = []
             debug_data: List[Column] = []
@@ -151,13 +150,8 @@ class SqlServerToCsv(DatabaseToCsv):
             for schema_row in schema_res:
                 column = Column(name=schema_row['column_name'],
                                 data_type=schema_row['data_type'].upper())
-                accessable = accessable_columns is None or column.name in accessable_columns
                 if schema_row['data_type'].upper() not in self.ignore_mssql_types:
-                    if accessable:
-                        columns.append(column)
-                if not accessable:
-                    logger.warning(f"{column} is not accessbile when doing select top 1 * from {tbl_schema}.{tbl_name},"
-                                   f" removing from column list.")
+                    columns.append(column)
                 debug_data.append(column)
             if len(columns) == 0:
                 print(f"Oh no. No columns on table {tbl_name} after filtering.  Dumping debug stack!")
