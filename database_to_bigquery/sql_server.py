@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-#import pymssql
+# import pymssql
 import json
 from typing import Tuple, List, Optional
 import logging
@@ -16,16 +16,23 @@ from time import time
 from google.cloud import bigquery
 from sqlalchemy import create_engine
 from sqlalchemy import engine
-from database_to_bigquery.base import DatabaseToCsv, elapsed_string, Column, CopyResult, SplitResult, IngestResult, \
-    DatabaseToBigquery
+from database_to_bigquery.base import (
+    DatabaseToCsv,
+    elapsed_string,
+    Column,
+    CopyResult,
+    SplitResult,
+    IngestResult,
+    DatabaseToBigquery,
+)
 
 logger = logging.getLogger("DatabaseToBigquery")
 logger.setLevel(logging.INFO)
-logging.getLogger('backoff').addHandler(logging.StreamHandler())
+logging.getLogger("backoff").addHandler(logging.StreamHandler())
 
-driver = '{ODBC Driver 17 for SQL Server}'
-if platform.system() == 'Windows':
-    driver = '{SQL Server}'
+driver = "{ODBC Driver 17 for SQL Server}"
+if platform.system() == "Windows":
+    driver = "{SQL Server}"
 
 
 def retry_https_status_codes():
@@ -41,14 +48,22 @@ class SqlServerToCsv(DatabaseToCsv):
     The program tries to have a small memory footprint, and streams the data to GCS using the library "smart open" to
     handle this.
     """
+
     SPLIT_MIN_SIZE = 1000000
     CSV_CONTENT_POSTFIX = "content"
 
     SPLIT_NO_SPLIT = -1
     SPLIT_DYNAMIC = 0
 
-    def __init__(self, username: str, password: str, host: str, database: str, destination: str,
-                 extra_crc_fields: Optional[List[str]] = None):
+    def __init__(
+        self,
+        username: str,
+        password: str,
+        host: str,
+        database: str,
+        destination: str,
+        extra_crc_fields: Optional[List[str]] = None,
+    ):
         """
 
         :param username:
@@ -69,13 +84,17 @@ class SqlServerToCsv(DatabaseToCsv):
 
         # This method seems to handle cases where instance name is supplied better than sqlalchemy create engine with
         # an url string.
-        self.sql_engine = create_engine('mssql://', creator=lambda x: pyodbc.connect(driver=self.connection_driver,
-                                                                                     server=self.host,
-                                                                                     database=self.database,
-                                                                                     uid=self.username,
-                                                                                     pwd=self.password,
-                                                                                     port=self.port)
-                                        )
+        self.sql_engine = create_engine(
+            "mssql://",
+            creator=lambda x: pyodbc.connect(
+                driver=self.connection_driver,
+                server=self.host,
+                database=self.database,
+                uid=self.username,
+                pwd=self.password,
+                port=self.port,
+            ),
+        )
         self.strip_char_type = True
         # bigquery doesnt really have blobs/lobs/..
         self.ignore_mssql_types = ["VARBINARY"]
@@ -84,14 +103,18 @@ class SqlServerToCsv(DatabaseToCsv):
         else:
             self.extra_crc_fields = None
 
-    @backoff.on_exception(backoff.expo,
-                          OperationalError,
-                          max_tries=8,
-                          jitter=None,
-                          max_time=300,
-                          giveup=lambda e: "timeout" not in f"{e}")
+    @backoff.on_exception(
+        backoff.expo,
+        OperationalError,
+        max_tries=8,
+        jitter=None,
+        max_time=300,
+        giveup=lambda e: "timeout" not in f"{e}",
+    )
     def connect(self) -> engine.Connection:
-        logger.info(f"Connecting to {self.database} on {self.host} as user {self.username}")
+        logger.info(
+            f"Connecting to {self.database} on {self.host} as user {self.username}"
+        )
         return self.sql_engine.connect()
 
     def safe_cast(self, the_value):
@@ -116,7 +139,7 @@ class SqlServerToCsv(DatabaseToCsv):
         """
         bq_row = {}
         for k, v in mssql_row.items():
-            if mssql_datatypes[k].upper() == 'CHAR' and self.strip_char_type:
+            if mssql_datatypes[k].upper() == "CHAR" and self.strip_char_type:
                 if v:
                     bq_row[k] = v.strip()
                 else:
@@ -126,16 +149,22 @@ class SqlServerToCsv(DatabaseToCsv):
 
         return bq_row
 
-    def _get_columns_with_access(self, connection: engine.Connection, tbl_schema: str, tbl_name: str) -> Optional[List[str]]:
+    def _get_columns_with_access(
+        self, connection: engine.Connection, tbl_schema: str, tbl_name: str
+    ) -> Optional[List[str]]:
         try:
-            res = next(connection.execute(f"SELECT TOP 1 * FROM {tbl_schema}.{tbl_name}"))
+            res = next(
+                connection.execute(f"SELECT TOP 1 * FROM {tbl_schema}.{tbl_name}")
+            )
 
             columns = [i for i in res.keys()]
             return columns
         except StopIteration as empty_table:
             return None
 
-    def get_columns(self, tbl_schema: str, tbl_name: str) -> Tuple[List[Column], List[str]]:
+    def get_columns(
+        self, tbl_schema: str, tbl_name: str
+    ) -> Tuple[List[Column], List[str]]:
         """
         Gets a list of columns belonging to the table tbl_name
         :param tbl_schema: schema where the table resides.
@@ -143,20 +172,28 @@ class SqlServerToCsv(DatabaseToCsv):
         :return: A tuple containing a list of columns + list of primary keys
         """
         with self.connect() as connection:
-            schema_res = connection.execute("SELECT C.column_name, C.data_type from INFORMATION_SCHEMA.COLUMNS as C WHERE TABLE_SCHEMA=? AND TABLE_NAME=?", (tbl_schema, tbl_name))
+            schema_res = connection.execute(
+                "SELECT C.column_name, C.data_type from INFORMATION_SCHEMA.COLUMNS as C WHERE TABLE_SCHEMA=? AND TABLE_NAME=?",
+                (tbl_schema, tbl_name),
+            )
             columns: List[Column] = []
             debug_data: List[Column] = []
 
             for schema_row in schema_res:
-                column = Column(name=schema_row['column_name'],
-                                data_type=schema_row['data_type'].upper())
-                if schema_row['data_type'].upper() not in self.ignore_mssql_types:
+                column = Column(
+                    name=schema_row["column_name"],
+                    data_type=schema_row["data_type"].upper(),
+                )
+                if schema_row["data_type"].upper() not in self.ignore_mssql_types:
                     columns.append(column)
                 debug_data.append(column)
             if len(columns) == 0:
-                print(f"Oh no. No columns on table {tbl_name} after filtering.  Dumping debug stack!")
                 print(
-                    f"SELECT C.column_name, C.data_type from INFORMATION_SCHEMA.COLUMNS as C WHERE TABLE_SCHEMA='{tbl_schema}' AND TABLE_NAME='{tbl_name}'")
+                    f"Oh no. No columns on table {tbl_name} after filtering.  Dumping debug stack!"
+                )
+                print(
+                    f"SELECT C.column_name, C.data_type from INFORMATION_SCHEMA.COLUMNS as C WHERE TABLE_SCHEMA='{tbl_schema}' AND TABLE_NAME='{tbl_name}'"
+                )
                 for d in debug_data:
                     print(d)
                 raise RuntimeError("im broken.")
@@ -165,18 +202,22 @@ class SqlServerToCsv(DatabaseToCsv):
             pk_res = connection.execute(sql, tbl_name)
             pk_list = []
             for pk_row in pk_res:
-                pk_column = pk_row['COLUMN_NAME']
+                pk_column = pk_row["COLUMN_NAME"]
                 pk_list.append(pk_column)
                 columns[columns.index(pk_column)].pk = True
 
             if len(pk_list) == 0:
                 if os.getenv("TABLE_PKS", None) is not None:
                     pk_from_env = os.getenv("TABLE_PKS").split(",")
-                    logger.warning(f"The table or view {tbl_schema}.{tbl_name} has no primary keys, using explicit pks "
-                                   f"from environment...")
+                    logger.warning(
+                        f"The table or view {tbl_schema}.{tbl_name} has no primary keys, using explicit pks "
+                        f"from environment..."
+                    )
                 else:
-                    logger.warning(f"The table or view {tbl_schema}.{tbl_name} has no primary keys, will try to use all"
-                                   f" columns as sorting keys...")
+                    logger.warning(
+                        f"The table or view {tbl_schema}.{tbl_name} has no primary keys, will try to use all"
+                        f" columns as sorting keys..."
+                    )
                     pk_from_env = [c.name for c in columns]
                 for pk_row in pk_from_env:
                     pk_column: str = pk_row
@@ -185,7 +226,9 @@ class SqlServerToCsv(DatabaseToCsv):
 
             return columns, pk_list
 
-    def _generate_view_sql(self, table: str, schema: str, columns: list, split_keys: list, split_size: int):
+    def _generate_view_sql(
+        self, table: str, schema: str, columns: list, split_keys: list, split_size: int
+    ):
         if split_size > 0:
             sql_view = f"WITH splits AS (SELECT (ROW_NUMBER() OVER(ORDER BY {','.join(split_keys)})) / {split_size} + 1 as internal_split,{','.join(columns)} from {schema}.{table})"
         else:
@@ -193,28 +236,44 @@ class SqlServerToCsv(DatabaseToCsv):
         return sql_view
 
     # TODO: maybe tmp table to lock records.
-    def generate_splits(self, table: str, schema: str, columns_type: List[Column], split_keys: list, split_size: int) -> dict:
+    def generate_splits(
+        self,
+        table: str,
+        schema: str,
+        columns_type: List[Column],
+        split_keys: list,
+        split_size: int,
+    ) -> dict:
         """
         Split table into chunks.
         Generate a split for empty sources as well.
         """
         splits = {}
-        sql_view = self._generate_view_sql(table=table, schema=schema, columns=[c.name for c in columns_type],
-                                           split_keys=split_keys, split_size=split_size)
+        sql_view = self._generate_view_sql(
+            table=table,
+            schema=schema,
+            columns=[c.name for c in columns_type],
+            split_keys=split_keys,
+            split_size=split_size,
+        )
         minmax_keys = [c for c in split_keys]
         if self.extra_crc_fields:
             for c in self.extra_crc_fields:
                 if c in columns_type:
                     minmax_keys.append(c)
-        sql_minmax = ",".join([f"MIN({c}) as {c}_min, MAX({c}) as {c}_max" for c in minmax_keys])
+        sql_minmax = ",".join(
+            [f"MIN({c}) as {c}_min, MAX({c}) as {c}_max" for c in minmax_keys]
+        )
         if len(sql_minmax) > 0:
             sql_minmax += ","
-        sql = f"select {split_size} AS split_size," \
-              f"internal_split, " \
-              f"count(*) as cnt," \
-              f"{sql_minmax}" \
-              f"CHECKSUM_AGG(CHECKSUM(*)) as crc " \
-              f"from splits group by internal_split"
+        sql = (
+            f"select {split_size} AS split_size,"
+            f"internal_split, "
+            f"count(*) as cnt,"
+            f"{sql_minmax}"
+            f"CHECKSUM_AGG(CHECKSUM(*)) as crc "
+            f"from splits group by internal_split"
+        )
 
         sql_from_view = f"{sql_view} {sql}"
         logger.info(f"GENERATED SPLIT SQL: {sql_from_view}")
@@ -224,43 +283,53 @@ class SqlServerToCsv(DatabaseToCsv):
             for split in split_res:
                 cnt += 1
                 split_dict = dict(split)
-                split_dict['internal_columns'] = " | ".join([f"{c}" for c in columns_type])
-                splits[split['internal_split']] = split_dict
-                logger.info(f"Split with id {split['internal_split']} has crc = {split_dict}")
+                split_dict["internal_columns"] = " | ".join(
+                    [f"{c}" for c in columns_type]
+                )
+                splits[split["internal_split"]] = split_dict
+                logger.info(
+                    f"Split with id {split['internal_split']} has crc = {split_dict}"
+                )
             if cnt == 0:
-                logger.warning(f"Source table {schema}.{table} is EMPTY. generating an empty split")
-                splits[1] = {
-                    'split_size': split_size,
-                    'internal_split': 1,
-                    'cnt': 0
-                }
+                logger.warning(
+                    f"Source table {schema}.{table} is EMPTY. generating an empty split"
+                )
+                splits[1] = {"split_size": split_size, "internal_split": 1, "cnt": 0}
         return splits
 
-    @backoff.on_exception(backoff.expo,
-                          UploadFailedError,
-                          max_tries=8,
-                          jitter=None,
-                          max_time=300,
-                          giveup=lambda e: e.status_code not in retry_https_status_codes())
+    @backoff.on_exception(
+        backoff.expo,
+        UploadFailedError,
+        max_tries=8,
+        jitter=None,
+        max_time=300,
+        giveup=lambda e: e.status_code not in retry_https_status_codes(),
+    )
     def destination_result_exists(self, split: dict, destination_file: str) -> bool:
-        split_id = split['internal_split']
-        split_size = split['split_size']
+        split_id = split["internal_split"]
+        split_size = split["split_size"]
         split_data = json.dumps(split, default=str).encode()
-        crc_location = self.crc_location(self.base_destination(destination_file, split_size),split_id)
-        content_location = self.content_location(self.base_destination(destination_file, split_size),split_id)
+        crc_location = self.crc_location(
+            self.base_destination(destination_file, split_size), split_id
+        )
+        content_location = self.content_location(
+            self.base_destination(destination_file, split_size), split_id
+        )
         try:
             with smart_open.open(f"{crc_location}") as crc:
                 existing_content = crc.read()
                 if existing_content == split_data.decode():
                     logger.info(
-                        f"{destination_file}: A resultset exists at destination, and CRC is matching, verifying csv.")
+                        f"{destination_file}: A resultset exists at destination, and CRC is matching, verifying csv."
+                    )
                     # This will throw if file not exists.
                     with smart_open.open(content_location) as tmp:
                         logger.info(f"{destination_file}: Content file is present.")
                     return True
                 else:
                     logger.info(
-                        f"{destination_file}: A resultset exists at destination ({content_location}), but it has changed.")
+                        f"{destination_file}: A resultset exists at destination ({content_location}), but it has changed."
+                    )
                     logger.info(f"{existing_content}")
                     logger.info(f" != ")
                     logger.info(f"{split_data.decode()}")
@@ -289,17 +358,26 @@ class SqlServerToCsv(DatabaseToCsv):
     def crc_location(self, base_destination: str, split_id: int) -> str:
         return f"{base_destination}-{split_id}.crc"
 
-    @backoff.on_exception(backoff.expo,
-                          UploadFailedError,
-                          max_tries=8,
-                          jitter=None,
-                          max_time=300,
-                          giveup=lambda e: e.status_code not in retry_https_status_codes())
-    def write_split_to_destination(self, split: dict, destination_folder: str, table: str, schema: str,
-                                   columns_type: List[Column], split_keys: list) -> int:
-        split_id = split['internal_split']
-        split_size = split['split_size']
-        expected_rows = split['cnt'] if split['cnt'] > 0 else 1
+    @backoff.on_exception(
+        backoff.expo,
+        UploadFailedError,
+        max_tries=8,
+        jitter=None,
+        max_time=300,
+        giveup=lambda e: e.status_code not in retry_https_status_codes(),
+    )
+    def write_split_to_destination(
+        self,
+        split: dict,
+        destination_folder: str,
+        table: str,
+        schema: str,
+        columns_type: List[Column],
+        split_keys: list,
+    ) -> int:
+        split_id = split["internal_split"]
+        split_size = split["split_size"]
+        expected_rows = split["cnt"] if split["cnt"] > 0 else 1
         columns = [c.name for c in columns_type]
         location = self.base_destination(destination_folder, split_size)
         content_location = self.content_location(location, split_id)
@@ -307,12 +385,18 @@ class SqlServerToCsv(DatabaseToCsv):
 
         with smart_open.open(content_location, "w") as split_destination:
             cnt = 0
-            logger.info(
-                f"Going to write {expected_rows} rows to {content_location}")
-            writer = csv.DictWriter(split_destination, fieldnames=columns, quotechar='"')
+            logger.info(f"Going to write {expected_rows} rows to {content_location}")
+            writer = csv.DictWriter(
+                split_destination, fieldnames=columns, quotechar='"'
+            )
             writer.writeheader()
-            sql_view = self._generate_view_sql(table=table, schema=schema, columns=columns, split_keys=split_keys,
-                                               split_size=split_size)
+            sql_view = self._generate_view_sql(
+                table=table,
+                schema=schema,
+                columns=columns,
+                split_keys=split_keys,
+                split_size=split_size,
+            )
             sql = f"select {','.join(columns)} from splits where internal_split=?"
 
             sql_from_view = f"{sql_view} {sql}"
@@ -332,55 +416,80 @@ class SqlServerToCsv(DatabaseToCsv):
                             writer.writerow(self.row_to_bq(split_row, mssql_datatypes))
                             cnt += 1
                             if cnt / expected_rows * 100 >= print_msg:
-                                logger.info(f"{table} {cnt} / {expected_rows} [{print_msg}%]")
+                                logger.info(
+                                    f"{table} {cnt} / {expected_rows} [{print_msg}%]"
+                                )
                                 print_msg += 10
                         split_rows = split_res.fetchmany(size=batch_size)
         with smart_open.open(crc_location, "w") as split_crc:
             logger.info(
-                f"{destination_folder}: Writing CRC to destination {crc_location}")
+                f"{destination_folder}: Writing CRC to destination {crc_location}"
+            )
             split_data = json.dumps(split, default=str)
             logger.info(f"{destination_folder}: crc payload = {split_data}")
             split_crc.write(split_data)
         return cnt
 
-    def process_split(self, split: dict, columns_type: List[Column], primary_keys: List[str], table: str,
-                      schema: str, destination_folder: str) -> SplitResult:
+    def process_split(
+        self,
+        split: dict,
+        columns_type: List[Column],
+        primary_keys: List[str],
+        table: str,
+        schema: str,
+        destination_folder: str,
+    ) -> SplitResult:
         """
         Process the split as specified by split.  in theory, the split can come from another process or machine to
         process splits distributed.  This has not been tested and probably requires some work to do properly.
-        
+
         :param split: The split
-        :param columns_type: A list of columns to read from table. 
+        :param columns_type: A list of columns to read from table.
         :param primary_keys: The primary keys for the table.
         :param table: The table to process
         :param schema: The schema where the table exists.
         :param destination_folder: The destination folder to put this.
-        :return: 
+        :return:
         """
-        split_id = split['internal_split']
-        split_size = split['split_size']
+        split_id = split["internal_split"]
+        split_size = split["split_size"]
         cache_hit = False
         rows = -1
-        base_destination = self.base_destination(destination_file=destination_folder, split_size=split_size)
+        base_destination = self.base_destination(
+            destination_file=destination_folder, split_size=split_size
+        )
         logger.info(f"{destination_folder}: Processing split {split_id}")
         start = time()
-        if self.destination_result_exists(split=split, destination_file=destination_folder):
-            logger.info(f"{destination_folder}: Nothing to do here, file already exists with correct crc.")
+        if self.destination_result_exists(
+            split=split, destination_file=destination_folder
+        ):
+            logger.info(
+                f"{destination_folder}: Nothing to do here, file already exists with correct crc."
+            )
             cache_hit = True
         else:
-            rows = self.write_split_to_destination(split=split, destination_folder=destination_folder, table=table,
-                                                   schema=schema, columns_type=columns_type, split_keys=primary_keys)
+            rows = self.write_split_to_destination(
+                split=split,
+                destination_folder=destination_folder,
+                table=table,
+                schema=schema,
+                columns_type=columns_type,
+                split_keys=primary_keys,
+            )
         end = time()
         elapsed = end - start
 
         logger.info(
-            f"{destination_folder}: Processing of split {split_id} took {elapsed_string(elapsed=elapsed)}")
+            f"{destination_folder}: Processing of split {split_id} took {elapsed_string(elapsed=elapsed)}"
+        )
 
-        return SplitResult(content_file=self.content_location(base_destination, split_id),
-                           crc_file=self.crc_location(base_destination, split_id),
-                           elapsed=elapsed,
-                           cache_hit=cache_hit,
-                           row_count=rows)
+        return SplitResult(
+            content_file=self.content_location(base_destination, split_id),
+            crc_file=self.crc_location(base_destination, split_id),
+            elapsed=elapsed,
+            cache_hit=cache_hit,
+            row_count=rows,
+        )
 
     def get_rows(self, table: str, schema: str) -> int:
         """
@@ -393,7 +502,7 @@ class SqlServerToCsv(DatabaseToCsv):
         with self.connect() as connection:
             res = connection.execute(f"SELECT COUNT(*) as cnt FROM {schema}.{table}")
             count = res.first()
-            return count['cnt']
+            return count["cnt"]
 
     def calculate_dynamic_split(self, row_count: int) -> int:
         """
@@ -410,11 +519,19 @@ class SqlServerToCsv(DatabaseToCsv):
         # keep minimum split jump to min_split_jump
         # 20.000.000 / 10*1000.000 = 2 * 1000.000 = 2m
         # 15.000.000 / 10*1000.000 = 1 * 1000.000 = 1m
-        split_size = max(int(row_count / (wanted_splits * min_split_jump)) * min_split_jump,
-                         self.SPLIT_MIN_SIZE)
+        split_size = max(
+            int(row_count / (wanted_splits * min_split_jump)) * min_split_jump,
+            self.SPLIT_MIN_SIZE,
+        )
         return split_size
 
-    def copy_table(self, table: str, sql_server_schema: str, destination_folder: str, split_size: int = -1) -> CopyResult:
+    def copy_table(
+        self,
+        table: str,
+        sql_server_schema: str,
+        destination_folder: str,
+        split_size: int = -1,
+    ) -> CopyResult:
         """
         Copy a table from SQL server to a destination folder, containing one or more files.
         A crc will be generated for each file, and if further copies are attempted the crc will be checked before
@@ -431,34 +548,51 @@ class SqlServerToCsv(DatabaseToCsv):
         start = time()
         if 0 < split_size < self.SPLIT_MIN_SIZE:
             logger.warning(
-                f"Split size is set to {split_size}, which is less than the suggested minimum low of {self.SPLIT_MIN_SIZE}")
+                f"Split size is set to {split_size}, which is less than the suggested minimum low of {self.SPLIT_MIN_SIZE}"
+            )
         table_rows = self.get_rows(table=table, schema=sql_server_schema)
         if split_size == self.SPLIT_DYNAMIC:
             split_size = self.calculate_dynamic_split(table_rows)
-            logger.info(f"{table}: Dynamic split size set to {split_size if split_size != -1 else 'NO_SPLIT'}!")
+            logger.info(
+                f"{table}: Dynamic split size set to {split_size if split_size != -1 else 'NO_SPLIT'}!"
+            )
         base_location = self.base_destination(destination_folder, split_size)
-        columns_type, primary_keys = self.get_columns(tbl_name=table, tbl_schema=sql_server_schema)
-        splits = self.generate_splits(table=table, schema=sql_server_schema, columns_type=columns_type, split_keys=primary_keys,
-                                      split_size=split_size)
+        columns_type, primary_keys = self.get_columns(
+            tbl_name=table, tbl_schema=sql_server_schema
+        )
+        splits = self.generate_splits(
+            table=table,
+            schema=sql_server_schema,
+            columns_type=columns_type,
+            split_keys=primary_keys,
+            split_size=split_size,
+        )
         split_results = []
         cnt = 0
         for split_id, split in splits.items():
-            res = self.process_split(split=split, columns_type=columns_type, primary_keys=primary_keys,
-                                     table=table, schema=sql_server_schema,
-                                     destination_folder=destination_folder)
+            res = self.process_split(
+                split=split,
+                columns_type=columns_type,
+                primary_keys=primary_keys,
+                table=table,
+                schema=sql_server_schema,
+                destination_folder=destination_folder,
+            )
             cnt += 1
             logger.info(f"Split {cnt} / {len(splits)} Done!")
             logger.info(f"{res}")
             split_results.append(res)
         end = time()
         elapsed = end - start
-        return CopyResult(table_name=table,
-                          schema_name=sql_server_schema,
-                          table_rows=table_rows,
-                          base_path=base_location,
-                          elapsed_time=elapsed,
-                          split_results=split_results,
-                          column_type=columns_type)
+        return CopyResult(
+            table_name=table,
+            schema_name=sql_server_schema,
+            table_rows=table_rows,
+            base_path=base_location,
+            elapsed_time=elapsed,
+            split_results=split_results,
+            column_type=columns_type,
+        )
 
 
 class SqlServerToBigquery(DatabaseToBigquery):
@@ -477,7 +611,7 @@ class SqlServerToBigquery(DatabaseToBigquery):
             "NUMBER": "NUMERIC",
             "DECIMAL": "FLOAT64",
             "FLOAT": "FLOAT",
-            "INT": "INT64"
+            "INT": "INT64",
         }
         for sql_server_type_from, bigquery_type_to in conversion.items():
             if sql_server_type_from in sql_server_type.data_type:
@@ -499,13 +633,17 @@ class SqlServerToBigquery(DatabaseToBigquery):
             )
         return bigquery_schema
 
-    @backoff.on_exception(backoff.expo,
-                          UploadFailedError,
-                          max_tries=8,
-                          jitter=None,
-                          max_time=300,
-                          giveup=lambda e: e.status_code not in retry_https_status_codes())
-    def write_bigquery_schema(self, columns_type: List[Column], bigquery_schema_location: str):
+    @backoff.on_exception(
+        backoff.expo,
+        UploadFailedError,
+        max_tries=8,
+        jitter=None,
+        max_time=300,
+        giveup=lambda e: e.status_code not in retry_https_status_codes(),
+    )
+    def write_bigquery_schema(
+        self, columns_type: List[Column], bigquery_schema_location: str
+    ):
         """
         Generate a BigQuery schema definition file and write to to location, with a postfix of -ddl.json
 
@@ -514,25 +652,37 @@ class SqlServerToBigquery(DatabaseToBigquery):
 
         :return: No return
         """
-        logger.info(f"Writing Schema defintion to destination {bigquery_schema_location}")
+        logger.info(
+            f"Writing Schema defintion to destination {bigquery_schema_location}"
+        )
         bigquery_ddl = self.calculate_bigquery_schema(columns_type)
-        schema = [{'name': c.name, 'type': c.field_type, 'mode': 'NULLABLE'} for c in bigquery_ddl]
+        schema = [
+            {"name": c.name, "type": c.field_type, "mode": "NULLABLE"}
+            for c in bigquery_ddl
+        ]
         with smart_open.open(bigquery_schema_location, "w") as bigquery_ddl_json:
             bigquery_ddl_json.write(json.dumps(schema, indent=4))
 
     def should_load_table(self, copy_result: CopyResult, table_id: str):
         try:
             destination_table = self.bigquery_client.get_table(table_id)
-            if copy_result.is_fully_cached() and destination_table.num_rows == copy_result.table_rows:
+            if (
+                copy_result.is_fully_cached()
+                and destination_table.num_rows == copy_result.table_rows
+            ):
                 return False
         except:
             pass
         return True
 
-    def ingest_table(self, sql_server_table: str, sql_server_schema: str,
-                     bigquery_destination_project: str,
-                     bigquery_destination_dataset: str,
-                     split_size=SqlServerToCsv.SPLIT_DYNAMIC) -> IngestResult:
+    def ingest_table(
+        self,
+        sql_server_table: str,
+        sql_server_schema: str,
+        bigquery_destination_project: str,
+        bigquery_destination_dataset: str,
+        split_size=SqlServerToCsv.SPLIT_DYNAMIC,
+    ) -> IngestResult:
         """
         Ingest the sql_server_table into bigquery.
         One or more csv files will be generated and placed in gcs storage.  The export to csv tries to be smart, and
@@ -553,26 +703,37 @@ class SqlServerToBigquery(DatabaseToBigquery):
         :return: a result object containing the ingestion results.
         """
         start_all = time()
-        result = self.sql_server_to_csv.copy_table(table=sql_server_table,
-                                                   sql_server_schema=sql_server_schema,
-                                                   destination_folder=sql_server_table,
-                                                   split_size=split_size)
+        result = self.sql_server_to_csv.copy_table(
+            table=sql_server_table,
+            sql_server_schema=sql_server_schema,
+            destination_folder=sql_server_table,
+            split_size=split_size,
+        )
         table_id = f"{bigquery_destination_project}.{bigquery_destination_dataset}.{sql_server_table}"
 
-        if not self.should_load_table(copy_result=result, table_id=table_id) \
-                and (os.getenv("DISABLE_LOAD_CACHE", None) is None):
-            logger.info(f"Skipping loading result to {table_id}, result is previously cached and rows match.")
+        if not self.should_load_table(copy_result=result, table_id=table_id) and (
+            os.getenv("DISABLE_LOAD_CACHE", None) is None
+        ):
+            logger.info(
+                f"Skipping loading result to {table_id}, result is previously cached and rows match."
+            )
             end = time()
-            return IngestResult(copy_result=result,
-                                rows_in_table=result.table_rows,
-                                table_id=table_id,
-                                timing_all=end - start_all,
-                                timing_bigquery=0,
-                                bigquery_schema_location=self.bigquery_schema_location(result.base_path))
+            return IngestResult(
+                copy_result=result,
+                rows_in_table=result.table_rows,
+                table_id=table_id,
+                timing_all=end - start_all,
+                timing_bigquery=0,
+                bigquery_schema_location=self.bigquery_schema_location(
+                    result.base_path
+                ),
+            )
 
         start_bigquery = time()
-        self.write_bigquery_schema(columns_type=result.column_type,
-                                   bigquery_schema_location=self.bigquery_schema_location(result.base_path))
+        self.write_bigquery_schema(
+            columns_type=result.column_type,
+            bigquery_schema_location=self.bigquery_schema_location(result.base_path),
+        )
 
         job_config = bigquery.LoadJobConfig(
             write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
@@ -584,7 +745,9 @@ class SqlServerToBigquery(DatabaseToBigquery):
 
         uri = f"{result.base_path}-{SqlServerToCsv.CSV_CONTENT_POSTFIX}*.csv"
 
-        logger.info(f"Importing data to BigQuery table {table_id}, with content from {uri}")
+        logger.info(
+            f"Importing data to BigQuery table {table_id}, with content from {uri}"
+        )
         load_job = self.bigquery_client.load_table_from_uri(
             uri, table_id, job_config=job_config
         )
@@ -595,9 +758,11 @@ class SqlServerToBigquery(DatabaseToBigquery):
         destination_table = self.bigquery_client.get_table(table_id)
 
         end = time()
-        return IngestResult(copy_result=result,
-                            rows_in_table=destination_table.num_rows,
-                            table_id=table_id,
-                            timing_all=end-start_all,
-                            timing_bigquery=end-start_bigquery,
-                            bigquery_schema_location=self.bigquery_schema_location(result.base_path))
+        return IngestResult(
+            copy_result=result,
+            rows_in_table=destination_table.num_rows,
+            table_id=table_id,
+            timing_all=end - start_all,
+            timing_bigquery=end - start_bigquery,
+            bigquery_schema_location=self.bigquery_schema_location(result.base_path),
+        )

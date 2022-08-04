@@ -22,6 +22,10 @@ The program will attempt to read from SQL Server and do the following:
   - if there was at least a partition read this run
   - or if the rows in bq does not match the rows in SQL server.
 
+## Development notes
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
+
 ## Configuration Options
 - DB_USERNAME - sqlserver username
 - DB_PASSWORD - sqlsever pw

@@ -5,8 +5,9 @@ from dataclasses import dataclass
 import yaml
 
 
-logging.basicConfig(level=logging.ERROR,
-                    format='%(levelname)s - %(module)s - %(message)s')
+logging.basicConfig(
+    level=logging.ERROR, format="%(levelname)s - %(module)s - %(message)s"
+)
 
 logger = logging.getLogger("database-to-bigquery")
 logger.setLevel(logging.INFO)
@@ -33,7 +34,9 @@ def get_env_config(override_dict) -> Config:
     assert password, "Missing DB_PASSWORD env variable or in config"
     host = os.getenv("DB_HOST", None) or override_dict.get("db_host", None)
     assert host, "Missing DB_HOST env variable or in config"
-    assert ":" not in host, "Port should not be specified in host, use DB_PORT env variable to override port (1433)"
+    assert (
+        ":" not in host
+    ), "Port should not be specified in host, use DB_PORT env variable to override port (1433)"
     database = os.getenv("DB_DATABASE", None) or override_dict.get("db_database", None)
     assert database, "Missing DB_DATABASE env variable or in config"
 
@@ -41,12 +44,18 @@ def get_env_config(override_dict) -> Config:
     assert bucket, "Missing GCS_BUCKET env variable"
     dataset = os.getenv("BQ_DATASET", None) or override_dict.get("bq_dataset", None)
     assert dataset, "Missing BQ_DATASET env variable"
-    target_gcp_project = os.getenv("TARGET_GCP_PROJECT", None) or override_dict.get("target_gcp_project", None)
+    target_gcp_project = os.getenv("TARGET_GCP_PROJECT", None) or override_dict.get(
+        "target_gcp_project", None
+    )
     assert target_gcp_project, "Missing TARGET_GCP_PROJECT env variable"
     table = os.getenv("DB_TABLE", None) or override_dict.get("db_table", None)
     assert table, "Missing DB_TABLE env variable"
-    split_size = int(os.getenv("SPLIT_SIZE", None) or override_dict.get("split_size", -1))
-    sql_server_schema = os.getenv("SQL_SERVER_SCHEMA", None) or override_dict.get("sql_server_schema", "dbo")
+    split_size = int(
+        os.getenv("SPLIT_SIZE", None) or override_dict.get("split_size", -1)
+    )
+    sql_server_schema = os.getenv("SQL_SERVER_SCHEMA", None) or override_dict.get(
+        "sql_server_schema", "dbo"
+    )
     return Config(
         db_username=username,
         db_password=password,
@@ -57,7 +66,8 @@ def get_env_config(override_dict) -> Config:
         gcp_target_project=target_gcp_project,
         db_table=table,
         split_size=split_size,
-        sql_server_schema=sql_server_schema)
+        sql_server_schema=sql_server_schema,
+    )
 
 
 def get_config() -> Config:
@@ -80,23 +90,29 @@ def get_config() -> Config:
         return get_env_config({})
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     config = get_config()
 
-    logger.info(f"Connecting to {config.db_username}/{config.db_database}@{config.db_host} and syncing table: "
-                f"{config.db_table} to {config.gcp_bucket}")
+    logger.info(
+        f"Connecting to {config.db_username}/{config.db_database}@{config.db_host} and syncing table: "
+        f"{config.db_table} to {config.gcp_bucket}"
+    )
 
-    sql_server_to_csv = SqlServerToCsv(username=config.db_username,
-                                       password=config.db_password,
-                                       host=config.db_host,
-                                       database=config.db_database,
-                                       destination=f"gs://{config.gcp_bucket}/sqlserver/{config.gcp_bq_dataset}")
+    sql_server_to_csv = SqlServerToCsv(
+        username=config.db_username,
+        password=config.db_password,
+        host=config.db_host,
+        database=config.db_database,
+        destination=f"gs://{config.gcp_bucket}/sqlserver/{config.gcp_bq_dataset}",
+    )
 
     bigquery = SqlServerToBigquery(sql_server_to_csv=sql_server_to_csv)
 
-    result = bigquery.ingest_table(sql_server_table=config.db_table,
-                                   sql_server_schema=config.sql_server_schema,
-                                   bigquery_destination_project=config.gcp_target_project,
-                                   bigquery_destination_dataset=config.gcp_bq_dataset,
-                                   split_size=config.split_size)
+    result = bigquery.ingest_table(
+        sql_server_table=config.db_table,
+        sql_server_schema=config.sql_server_schema,
+        bigquery_destination_project=config.gcp_target_project,
+        bigquery_destination_dataset=config.gcp_bq_dataset,
+        split_size=config.split_size,
+    )
     logger.info(result.full_str())
