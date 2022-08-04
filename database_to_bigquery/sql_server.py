@@ -193,18 +193,18 @@ class SqlServerToCsv(DatabaseToCsv):
         return sql_view
 
     # TODO: maybe tmp table to lock records.
-    def generate_splits(self, table: str, schema: str, columns: list, split_keys: list, split_size: int) -> dict:
+    def generate_splits(self, table: str, schema: str, columns_type: List[Column], split_keys: list, split_size: int) -> dict:
         """
         Split table into chunks.
         Generate a split for empty sources as well.
         """
         splits = {}
-        sql_view = self._generate_view_sql(table=table, schema=schema, columns=columns, split_keys=split_keys,
-                                           split_size=split_size)
+        sql_view = self._generate_view_sql(table=table, schema=schema, columns=[c.name for c in columns_type],
+                                           split_keys=split_keys, split_size=split_size)
         minmax_keys = [c for c in split_keys]
         if self.extra_crc_fields:
             for c in self.extra_crc_fields:
-                if c in columns:
+                if c in columns_type:
                     minmax_keys.append(c)
         sql_minmax = ",".join([f"MIN({c}) as {c}_min, MAX({c}) as {c}_max" for c in minmax_keys])
         if len(sql_minmax) > 0:
@@ -223,8 +223,10 @@ class SqlServerToCsv(DatabaseToCsv):
             cnt = 0
             for split in split_res:
                 cnt += 1
-                splits[split['internal_split']] = dict(split)
-                logger.info(f"Split with id {split['internal_split']} has crc = {split}")
+                split_dict = dict(split)
+                split_dict['internal_columns'] = " | ".join([f"{c}" for c in columns_type])
+                splits[split['internal_split']] = split_dict
+                logger.info(f"Split with id {split['internal_split']} has crc = {split_dict}")
             if cnt == 0:
                 logger.warning(f"Source table {schema}.{table} is EMPTY. generating an empty split")
                 splits[1] = {
@@ -436,8 +438,7 @@ class SqlServerToCsv(DatabaseToCsv):
             logger.info(f"{table}: Dynamic split size set to {split_size if split_size != -1 else 'NO_SPLIT'}!")
         base_location = self.base_destination(destination_folder, split_size)
         columns_type, primary_keys = self.get_columns(tbl_name=table, tbl_schema=sql_server_schema)
-        columns = [c.name for c in columns_type]
-        splits = self.generate_splits(table=table, schema=sql_server_schema, columns=columns, split_keys=primary_keys,
+        splits = self.generate_splits(table=table, schema=sql_server_schema, columns_type=columns_type, split_keys=primary_keys,
                                       split_size=split_size)
         split_results = []
         cnt = 0
