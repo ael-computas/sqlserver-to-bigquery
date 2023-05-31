@@ -616,14 +616,6 @@ class SqlServerToBigquery(DatabaseToBigquery):
             )
         return bigquery_schema
 
-    @backoff.on_exception(
-        backoff.expo,
-        Exception,
-        max_tries=8,
-        jitter=None,
-        max_time=300,
-        giveup=lambda e: e.grpc_status_code not in retry_https_status_codes(),
-    )
     def write_bigquery_schema(
         self, columns_type: List[Column], bigquery_schema_location: str
     ):
