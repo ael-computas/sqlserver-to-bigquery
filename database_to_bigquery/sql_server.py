@@ -4,7 +4,6 @@ import json
 from typing import Tuple, List, Optional
 import logging
 import smart_open
-from smart_open.gcs import UploadFailedError
 from sqlalchemy.exc import OperationalError
 import csv
 import decimal
@@ -297,14 +296,6 @@ class SqlServerToCsv(DatabaseToCsv):
                 splits[1] = {"split_size": split_size, "internal_split": 1, "cnt": 0}
         return splits
 
-    @backoff.on_exception(
-        backoff.expo,
-        UploadFailedError,
-        max_tries=8,
-        jitter=None,
-        max_time=300,
-        giveup=lambda e: e.status_code not in retry_https_status_codes(),
-    )
     def destination_result_exists(self, split: dict, destination_file: str) -> bool:
         split_id = split["internal_split"]
         split_size = split["split_size"]
@@ -358,14 +349,6 @@ class SqlServerToCsv(DatabaseToCsv):
     def crc_location(self, base_destination: str, split_id: int) -> str:
         return f"{base_destination}-{split_id}.crc"
 
-    @backoff.on_exception(
-        backoff.expo,
-        UploadFailedError,
-        max_tries=8,
-        jitter=None,
-        max_time=300,
-        giveup=lambda e: e.status_code not in retry_https_status_codes(),
-    )
     def write_split_to_destination(
         self,
         split: dict,
@@ -383,7 +366,7 @@ class SqlServerToCsv(DatabaseToCsv):
         content_location = self.content_location(location, split_id)
         crc_location = self.crc_location(location, split_id)
 
-        with smart_open.open(content_location, "w") as split_destination:
+        with smart_open.open(content_location, "w", newline='') as split_destination:
             cnt = 0
             logger.info(f"Going to write {expected_rows} rows to {content_location}")
             writer = csv.DictWriter(
@@ -635,11 +618,11 @@ class SqlServerToBigquery(DatabaseToBigquery):
 
     @backoff.on_exception(
         backoff.expo,
-        UploadFailedError,
+        Exception,
         max_tries=8,
         jitter=None,
         max_time=300,
-        giveup=lambda e: e.status_code not in retry_https_status_codes(),
+        giveup=lambda e: e.grpc_status_code not in retry_https_status_codes(),
     )
     def write_bigquery_schema(
         self, columns_type: List[Column], bigquery_schema_location: str

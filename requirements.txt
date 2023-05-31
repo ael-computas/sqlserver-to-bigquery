@@ -1,9 +1,8 @@
 google-cloud-storage
 google-cloud-bigquery
-smart_open[gcs]
+smart_open[gcs]==6.3.0
 pyodbc
-sqlalchemy
+sqlalchemy==1.4.17
 backoff
 google-cloud-secret-manager
 PyYAML
-backoff

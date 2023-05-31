@@ -1,0 +1,8 @@
+db_username: sa
+db_password: P@55w0rd
+db_host: localhost
+db_database: Prime
+gcs_bucket: integration-test-sql-server-to-bigquery
+bq_dataset: integration_test_sql_server_to_bigquery
+target_gcp_project: ael-cx
+db_table: MyTable

@@ -5,5 +5,4 @@ setup.sh
 *.pyc
 secret
 /db_conf.ini
-config.yaml
-testconfig
+*sa.json
