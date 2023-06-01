@@ -307,14 +307,14 @@ class SqlServerToCsv(DatabaseToCsv):
             self.base_destination(destination_file, split_size), split_id
         )
         try:
-            with smart_open.open(f"{crc_location}") as crc:
+            with smart_open.open(f"{crc_location}", encoding="utf-8") as crc:
                 existing_content = crc.read()
                 if existing_content == split_data.decode():
                     logger.info(
                         f"{destination_file}: A resultset exists at destination, and CRC is matching, verifying csv."
                     )
                     # This will throw if file not exists.
-                    with smart_open.open(content_location) as tmp:
+                    with smart_open.open(content_location, encoding="utf-8") as tmp:
                         logger.info(f"{destination_file}: Content file is present.")
                     return True
                 else:
@@ -366,7 +366,9 @@ class SqlServerToCsv(DatabaseToCsv):
         content_location = self.content_location(location, split_id)
         crc_location = self.crc_location(location, split_id)
 
-        with smart_open.open(content_location, "w", newline='') as split_destination:
+        with smart_open.open(
+            content_location, "w", encoding="utf-8", newline=""
+        ) as split_destination:
             cnt = 0
             logger.info(f"Going to write {expected_rows} rows to {content_location}")
             writer = csv.DictWriter(
@@ -404,7 +406,7 @@ class SqlServerToCsv(DatabaseToCsv):
                                 )
                                 print_msg += 10
                         split_rows = split_res.fetchmany(size=batch_size)
-        with smart_open.open(crc_location, "w") as split_crc:
+        with smart_open.open(crc_location, "w", encoding="utf-8") as split_crc:
             logger.info(
                 f"{destination_folder}: Writing CRC to destination {crc_location}"
             )
@@ -510,6 +512,7 @@ class SqlServerToCsv(DatabaseToCsv):
 
     def copy_table(
         self,
+        threads: int,
         table: str,
         sql_server_schema: str,
         destination_folder: str,
@@ -552,19 +555,51 @@ class SqlServerToCsv(DatabaseToCsv):
         )
         split_results = []
         cnt = 0
-        for split_id, split in splits.items():
-            res = self.process_split(
-                split=split,
-                columns_type=columns_type,
-                primary_keys=primary_keys,
-                table=table,
-                schema=sql_server_schema,
-                destination_folder=destination_folder,
-            )
+
+        def done_callback(f):
+            callback_res = f.result()
+            split_results.append(callback_res)
+            nonlocal cnt
             cnt += 1
             logger.info(f"Split {cnt} / {len(splits)} Done!")
-            logger.info(f"{res}")
-            split_results.append(res)
+            logger.info(f"{callback_res}")
+
+        if threads > 1 and len(splits) > 1:
+            import concurrent.futures
+
+            logger.warning(
+                f"Using experimental threading feature with {threads} threads"
+            )
+            executor = concurrent.futures.ThreadPoolExecutor(threads)
+            futures = [
+                executor.submit(
+                    self.process_split,
+                    split,
+                    columns_type,
+                    primary_keys,
+                    table,
+                    sql_server_schema,
+                    destination_folder,
+                )
+                for split_id, split in splits.items()
+            ]
+            for f in futures:
+                f.add_done_callback(done_callback)
+            concurrent.futures.wait(futures)
+        else:
+            for split_id, split in splits.items():
+                res = self.process_split(
+                    split=split,
+                    columns_type=columns_type,
+                    primary_keys=primary_keys,
+                    table=table,
+                    schema=sql_server_schema,
+                    destination_folder=destination_folder,
+                )
+                cnt += 1
+                logger.info(f"Split {cnt} / {len(splits)} Done!")
+                logger.info(f"{res}")
+                split_results.append(res)
         end = time()
         elapsed = end - start
         return CopyResult(
@@ -635,7 +670,9 @@ class SqlServerToBigquery(DatabaseToBigquery):
             {"name": c.name, "type": c.field_type, "mode": "NULLABLE"}
             for c in bigquery_ddl
         ]
-        with smart_open.open(bigquery_schema_location, "w") as bigquery_ddl_json:
+        with smart_open.open(
+            bigquery_schema_location, "w", encoding="utf-8"
+        ) as bigquery_ddl_json:
             bigquery_ddl_json.write(json.dumps(schema, indent=4))
 
     def should_load_table(self, copy_result: CopyResult, table_id: str):
@@ -652,6 +689,7 @@ class SqlServerToBigquery(DatabaseToBigquery):
 
     def ingest_table(
         self,
+        threads: int,
         sql_server_table: str,
         sql_server_schema: str,
         bigquery_destination_project: str,
@@ -679,6 +717,7 @@ class SqlServerToBigquery(DatabaseToBigquery):
         """
         start_all = time()
         result = self.sql_server_to_csv.copy_table(
+            threads=threads,
             table=sql_server_table,
             sql_server_schema=sql_server_schema,
             destination_folder=sql_server_table,

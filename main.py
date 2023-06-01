@@ -25,6 +25,7 @@ class Config:
     db_table: str
     split_size: int = -1
     sql_server_schema: str = "dbo"
+    threads: int = -1
 
 
 def get_env_config(override_dict) -> Config:
@@ -56,6 +57,8 @@ def get_env_config(override_dict) -> Config:
     sql_server_schema = os.getenv("SQL_SERVER_SCHEMA", None) or override_dict.get(
         "sql_server_schema", "dbo"
     )
+    threads = int(os.getenv("THREADS", None) or override_dict.get("threads", -1))
+
     return Config(
         db_username=username,
         db_password=password,
@@ -67,6 +70,7 @@ def get_env_config(override_dict) -> Config:
         db_table=table,
         split_size=split_size,
         sql_server_schema=sql_server_schema,
+        threads=threads,
     )
 
 
@@ -109,6 +113,7 @@ if __name__ == "__main__":
     bigquery = SqlServerToBigquery(sql_server_to_csv=sql_server_to_csv)
 
     result = bigquery.ingest_table(
+        threads=config.threads,
         sql_server_table=config.db_table,
         sql_server_schema=config.sql_server_schema,
         bigquery_destination_project=config.gcp_target_project,
