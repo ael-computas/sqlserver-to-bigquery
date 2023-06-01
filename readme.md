@@ -8,25 +8,18 @@ if you have a custom type.
 The program can be run standalone or in a kubernetes cluster (or airflow), for example.  It even works well with 
 serverless, since it has a low memory footprint and dont use local disk.
 
-The program will attempt to read from SQL Server and do the following:
-
-- If the table rows are > 1m rows, it will partition the table and sort it by PK
-- It generates an aggregated result first, containing sum,min,max of pk fields.
-- The entire result per parition gets a crc on the entire set.
-- It will then check GCS if it already has the partitioned cached by comparing the last runs aggregate vc this one.
-  - to do this it simply compares the content of the aggregate with the GCS stored one.
-  - if a partition is the same, it is skipped.
-  - NOTE: There is a slight chance that the CRC generated is not unique, in those cases you can provide additional date fields, so that you can compare max/min dates of updated_field, for example.
-- Each partition is stored in GCS as CSV format.
-- The files will be loaded to BigQuery for the following conditions
-  - if there was at least a partition read this run
-  - or if the rows in bq does not match the rows in SQL server.
+## Platforms
+This code is battle tested for linux systems, there might still be lurking issues for windows, especially regarding encodings.
 
 ## Development notes
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 
 ## Configuration Options
+The program can either be configured from environment variables (k8s friendly) or yaml files, either read from
+secretmanager (google) or from file system.
+
+*List of Environment variables you can set*
 - DB_USERNAME - sqlserver username
 - DB_PASSWORD - sqlsever pw
 - DB_HOST - sqlserver host
@@ -37,15 +30,30 @@ The program will attempt to read from SQL Server and do the following:
 - DB_TABLE - Source table to read.  Also destination table name
 - SPLIT_SIZE - defaults to -1 (dynamic, attempts to split in 20 chunks if > 1m rows)
 - SQL_SERVER_SCHEMA - defaults to dbo if not set
-- CONFIG_FILE - if this is set, try to read yaml file from that location.
 - SECRETMANAGER_URI - if set, try to load config file from secret manager.
+- THREADS - number of threads to use for reading concurrently 
+
+You can set the exact same options in a yaml file, but in lowercase.
+
+*env options only*
+- TABLE_PKS - column names to use for pk (some tables can have implicit pks not defined in ddl)
+- CONFIG_FILE - if this is set, try to read yaml file from that location.
+- DB_PORT - override sql server port
+- DB_DRIVER - override db driver to use
+- DISABLE_LOAD_CACHE - set this to always read and not use existing csv as cache
 
 ## Running the program
 You can read from yaml config or env variables, or both.
 A common scenario, can be to have db credentials in yaml file (mounted as secret, or a secret store) and have for example
 table from environment.
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/serviceaccount.json
+python main.py -c /path/to/config.yaml
+```
 
 ### example command line
+Here is an example mixing yaml and environment variables.
+
 Example.yaml
 
 ````
@@ -147,6 +155,21 @@ Row number 2 in the aggregate will change..
 And we can now just read internal_split=2, since internal_split=1 did not change.
 
 ## FAQ
+
+### How does it really work?
+The program will attempt to read from SQL Server and do the following:
+
+- If the table rows are > 1m rows, it will partition the table and sort it by PK
+- It generates an aggregated result first, containing sum,min,max of pk fields.
+- The entire result per parition gets a crc on the entire set.
+- It will then check GCS if it already has the partitioned cached by comparing the last runs aggregate vc this one.
+  - to do this it simply compares the content of the aggregate with the GCS stored one.
+  - if a partition is the same, it is skipped.
+  - NOTE: There is a slight chance that the CRC generated is not unique, in those cases you can provide additional date fields, so that you can compare max/min dates of updated_field, for example.
+- Each partition is stored in GCS as CSV format.
+- The files will be loaded to BigQuery for the following conditions
+  - if there was at least a partition read this run
+  - or if the rows in bq does not match the rows in SQL server.
 
 ### What about CDC?
 Change data capture is better and more scalable.  Look into debezium, for instance, to get you started.

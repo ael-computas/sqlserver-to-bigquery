@@ -26,6 +26,7 @@ class Config:
     split_size: int = -1
     sql_server_schema: str = "dbo"
     threads: int = -1
+    static_source: bool = True
 
 
 def get_env_config(override_dict) -> Config:
@@ -59,6 +60,8 @@ def get_env_config(override_dict) -> Config:
     )
     threads = int(os.getenv("THREADS", None) or override_dict.get("threads", -1))
 
+    static_source = os.getenv("STATIC_SOURCE", None) or override_dict.get("static_source", True)
+
     return Config(
         db_username=username,
         db_password=password,
@@ -71,12 +74,13 @@ def get_env_config(override_dict) -> Config:
         split_size=split_size,
         sql_server_schema=sql_server_schema,
         threads=threads,
+        static_source=static_source,
     )
 
 
-def get_config() -> Config:
-
+def get_config(config_path: str) -> Config:
     if os.getenv("SECRETMANAGER_URI", None):
+        logger.info("Reading config from SECRETMANAGER")
         from google.cloud import secretmanager
 
         name = os.getenv("SECRETMANAGER_URI", "")
@@ -87,19 +91,34 @@ def get_config() -> Config:
         p = yaml.load(response_payload, Loader=yaml.SafeLoader)
         return get_env_config(p)
     elif os.getenv("CONFIG_FILE", None):
+        logger.info(f"Reading config from {os.getenv('CONFIG_FILE', None)} (set in env)")
         with open(os.getenv("CONFIG_FILE"), "r") as cfg:
             p = yaml.load(cfg, Loader=yaml.SafeLoader)
             return get_env_config(p)
+    elif config_path is not None:
+        logger.info(f"Reading config from {config_path} (program argument)")
+        with open(config_path, "r") as cfg:
+            p = yaml.load(cfg, Loader=yaml.SafeLoader)
+            return get_env_config(p)
     else:
+        logger.info(f"No config specified.")
         return get_env_config({})
 
 
 if __name__ == "__main__":
-    config = get_config()
+    import argparse
+
+    parser = argparse.ArgumentParser(description='A test program.')
+
+    parser.add_argument("-c", "--config", help="path to yaml config file", type=str, default=None)
+
+    args = parser.parse_args()
+    config = get_config(config_path=args.config)
 
     logger.info(
         f"Connecting to {config.db_username}/{config.db_database}@{config.db_host} and syncing table: "
         f"{config.db_table} to {config.gcp_bucket}"
+        f"\n\rstatic_table: {config.static_source}"
     )
 
     sql_server_to_csv = SqlServerToCsv(
@@ -116,6 +135,7 @@ if __name__ == "__main__":
         threads=config.threads,
         sql_server_table=config.db_table,
         sql_server_schema=config.sql_server_schema,
+        static_source=config.static_source,
         bigquery_destination_project=config.gcp_target_project,
         bigquery_destination_dataset=config.gcp_bq_dataset,
         split_size=config.split_size,
