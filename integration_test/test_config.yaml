@@ -6,3 +6,5 @@ gcs_bucket: integration-test-sql-server-to-bigquery
 bq_dataset: integration_test_sql_server_to_bigquery
 target_gcp_project: ael-cx
 db_table: MyTable
+split_size: 10
+threads: 3

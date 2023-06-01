@@ -24,5 +24,5 @@ do
   shortname=$(echo $entry | cut -f 1 -d '.' | cut -f 2 -d '/')
   tableName=$database.dbo.$shortname
   echo importing $tableName from $entry
-  /opt/mssql-tools/bin/bcp $tableName in $entry -c -t',' -F 2 -S 0.0.0.0 -U sa -P $password
+  /opt/mssql-tools/bin/bcp $tableName in $entry -c -t'|' -F 2 -S 0.0.0.0 -U sa -P $password
 done
