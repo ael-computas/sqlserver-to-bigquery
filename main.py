@@ -74,9 +74,9 @@ def get_env_config(override_dict) -> Config:
     )
 
 
-def get_config() -> Config:
-
+def get_config(config_path: str) -> Config:
     if os.getenv("SECRETMANAGER_URI", None):
+        logger.info("Reading config from SECRETMANAGER")
         from google.cloud import secretmanager
 
         name = os.getenv("SECRETMANAGER_URI", "")
@@ -87,15 +87,29 @@ def get_config() -> Config:
         p = yaml.load(response_payload, Loader=yaml.SafeLoader)
         return get_env_config(p)
     elif os.getenv("CONFIG_FILE", None):
+        logger.info(f"Reading config from {os.getenv('CONFIG_FILE', None)} (set in env)")
         with open(os.getenv("CONFIG_FILE"), "r") as cfg:
             p = yaml.load(cfg, Loader=yaml.SafeLoader)
             return get_env_config(p)
+    elif config_path is not None:
+        logger.info(f"Reading config from {config_path} (program argument)")
+        with open(config_path, "r") as cfg:
+            p = yaml.load(cfg, Loader=yaml.SafeLoader)
+            return get_env_config(p)
     else:
+        logger.info(f"No config specified.")
         return get_env_config({})
 
 
 if __name__ == "__main__":
-    config = get_config()
+    import argparse
+
+    parser = argparse.ArgumentParser(description='A test program.')
+
+    parser.add_argument("-c", "--config", help="path to yaml config file", type=str, default=None)
+
+    args = parser.parse_args()
+    config = get_config(config_path=args.config)
 
     logger.info(
         f"Connecting to {config.db_username}/{config.db_database}@{config.db_host} and syncing table: "
