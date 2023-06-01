@@ -26,6 +26,7 @@ class Config:
     split_size: int = -1
     sql_server_schema: str = "dbo"
     threads: int = -1
+    static_source: bool = True
 
 
 def get_env_config(override_dict) -> Config:
@@ -59,6 +60,8 @@ def get_env_config(override_dict) -> Config:
     )
     threads = int(os.getenv("THREADS", None) or override_dict.get("threads", -1))
 
+    static_source = os.getenv("STATIC_SOURCE", None) or override_dict.get("static_source", True)
+
     return Config(
         db_username=username,
         db_password=password,
@@ -71,6 +74,7 @@ def get_env_config(override_dict) -> Config:
         split_size=split_size,
         sql_server_schema=sql_server_schema,
         threads=threads,
+        static_source=static_source,
     )
 
 
@@ -114,6 +118,7 @@ if __name__ == "__main__":
     logger.info(
         f"Connecting to {config.db_username}/{config.db_database}@{config.db_host} and syncing table: "
         f"{config.db_table} to {config.gcp_bucket}"
+        f"\n\rstatic_table: {config.static_source}"
     )
 
     sql_server_to_csv = SqlServerToCsv(
@@ -130,6 +135,7 @@ if __name__ == "__main__":
         threads=config.threads,
         sql_server_table=config.db_table,
         sql_server_schema=config.sql_server_schema,
+        static_source=config.static_source,
         bigquery_destination_project=config.gcp_target_project,
         bigquery_destination_dataset=config.gcp_bq_dataset,
         split_size=config.split_size,
